@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>InstaCode - Jan Jefferson Lam Trial Task</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.16/dist/tailwind.min.css" rel="stylesheet">
+</head>
+
+<body class="bg-gray-100 min-h-screen flex items-center justify-center">
+    <div id="app" class="container mx-auto py-8">
+        <h1 class="text-3xl font-bold text-blue-600 mb-8 text-center">InstaCode - Jan Jefferson Lam Trial Task</h1>
+        <div class="flex mb-4">
+            <input v-model="newItem.name" placeholder="Enter Topic Name"
+                class="input px-4 py-2 border border-gray-300 rounded-l-md w-2/3" />
+            <button @click="addTopic"
+                class="button px-4 py-2 bg-blue-600 text-white rounded-r-md hover:bg-blue-500 transition duration-200">Create</button>
+        </div>
+
+        <!-- Topics -->
+        <ul v-if="paginatedTopics.length > 0" class="space-y-4">
+            <li v-for="topic in paginatedTopics" :key="topic.guid" class="bg-white shadow-md rounded-md p-4">
+                <div class="flex justify-between items-center mb-2">
+                    <h2 class="text-xl font-bold text-gray-800">{{ topic.name }} ({{ topic.guid }})</h2>
+                    <div class="flex space-x-2">
+                        <button @click="editTopic(topic)"
+                            class="button-small px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-500 transition duration-200">Edit</button>
+                        <button @click="deleteTopic(topic)"
+                            class="button-small px-3 py-1 bg-red-600 text-white rounded-md hover:bg-red-500 transition duration-200">Delete</button>
+                    </div>
+                </div>
+
+                <!-- Form for adding new comment -->
+                <div class="flex mb-4">
+                    <input v-model="topic.newComment.comment" placeholder="Enter Comment"
+                        class="input px-4 py-2 border border-gray-300 rounded-l-md w-2/3" />
+                    <input v-model="topic.newComment.by" placeholder="Enter Author"
+                        class="input px-4 py-2 border border-gray-300 rounded-r-md w-1/3 ml-2" />
+                    <button @click="addComment(topic)"
+                        class="button px-4 py-2 bg-blue-600 text-white rounded-md ml-2 hover:bg-blue-500 transition duration-200">Submit</button>
+                </div>
+
+                <!-- Comments -->
+                <ul v-if="topic.comments && topic.comments.length > 0" class="space-y-2">
+                    <li v-for="comment in topic.comments" :key="comment.date"
+                        class="bg-gray-100 shadow-md rounded-md p-3 flex justify-between items-center">
+                        <p class="text-sm text-gray-700">{{ comment.comment }} (by: {{ comment.by }} on {{ comment.date }})</p>
+                        <div class="flex space-x-2">
+                            <button @click="editComment(topic, comment)"
+                                class="button-small px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-500 transition duration-200">Edit
+                                Comment</button>
+                            <button @click="deleteComment(topic, comment)"
+                                class="button-small px-3 py-1 bg-red-600 text-white rounded-md hover:bg-red-500 transition duration-200">Delete
+                                Comment</button>
+                        </div>
+                    </li>
+                </ul>
+                <p v-else class="text-gray-500">No comments for this topic.</p>
+            </li>
+        </ul>
+        <p v-else class="text-gray-500">No topics available.</p>
+
+        <!-- Pagination -->
+        <div class="flex justify-center mt-4">
+            <button @click="previousPage"
+                class="button px-4 py-2 bg-blue-600 text-white rounded-md mr-2 hover:bg-blue-500 transition duration-200"
+                :disabled="currentPage === 0">Previous</button>
+            <button @click="nextPage"
+                class="button px-4 py-2 bg-blue-600 text-white rounded-md ml-2 hover:bg-blue-500 transition duration-200"
+                :disabled="currentPage >= totalPages - 1">Next</button>
+        </div>
+
+        <!-- Edit forms -->
+        <div v-if="currentTopic" class="bg-white shadow-md rounded-md p-4 mt-8">
+            <h2 class="text-xl font-bold text-gray-800 mb-4">Edit Topic</h2>
+            <input v-model="currentTopic.name" placeholder="Enter Topic Name"
+                class="input px-4 py-2 border border-gray-300 rounded-md mb-2 w-full" />
+            <button @click="saveTopic"
+                class="button px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-500 transition duration-200">Submit</button>
+        </div>
+
+        <div v-if="currentComment" class="bg-white shadow-md rounded-md p-4 mt-8">
+            <h2 class="text-xl font-bold text-gray-800 mb-4">Edit Comment</h2>
+            <input v-model="currentComment.comment" placeholder="Enter Comment"
+                class="input px-4 py-2 border border-gray-300 rounded-md mb-2 w-full" />
+            <input v-model="currentComment.by" placeholder="Enter Author"
+                class="input px-4 py-2 border border-gray-300 rounded-md mb-2 w-full" />
+            <button @click="saveComment"
+                class="button px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-500 transition duration-200">Submit</button>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js"></script>
+    <script>
+        new Vue({
+            el: '#app',
+            data: {
+                topics: [],
+                newItem: {
+                    name: '',
+                },
+                currentTopic: null,
+                currentComment: null,
+                currentPage: 0,
+                pageSize: 20, // Adjust page size as needed
+            },
+            mounted() {
+                // Fetch data on component mount
+                this.loadFromLocalStorage();
+                if (this.topics.length === 0) {
+                    this.fetchData();
+                }
+            },
+            methods: {
+                fetchData() {
+                    // Fetch your data here from the provided link
+                    fetch("https://atillc.blob.core.windows.net/data-collector/icode/test-data/topics.json")
+                        .then(response => {
+                            if (!response.ok) {
+                                throw new Error("HTTP error " + response.status);
+                            }
+                            return response.json();
+                        })
+                        .then(json => {
+                            // Initialize the editing property for each comment
+                            for (let topic of json.topics) {
+                                topic.newComment = {
+                                    comment: '',
+                                    by: '',
+                                };
+                                for (let comment of topic.comments) {
+                                    comment.editing = false;
+                                }
+                                topic.editing = false;
+                            }
+                            this.topics = json.topics;
+                            this.saveToLocalStorage(); // Save to local storage after fetching
+                        })
+                        .catch(error => {
+                            console.error("There was a problem with the fetch operation:", error.message);
+                        });
+                },
+                addTopic() {
+                    if (this.newItem.name.trim()) {
+                        const guid = Math.random().toString(36).substr(2, 8); // Generate a random guid (example)
+                        const newTopic = {
+                            name: this.newItem.name,
+                            guid: guid,
+                            comments: [],
+                            newComment: {
+                                comment: '',
+                                by: '',
+                            },
+                        };
+                        this.topics.push(newTopic);
+                        this.newItem.name = '';
+
+                        this.saveToLocalStorage(); // Save after adding a new topic
+                    }
+                },
+                editTopic(topic) {
+                    this.currentTopic = { ...topic };
+                },
+                saveTopic() {
+                    if (this.currentTopic) {
+                        const index = this.topics.findIndex(t => t.guid === this.currentTopic.guid);
+                        if (index !== -1) {
+                            this.topics.splice(index, 1, this.currentTopic);
+                        }
+                        this.currentTopic = null;
+                        this.saveToLocalStorage(); // Save after editing a topic
+                    }
+                },
+                deleteTopic(topic) {
+                    const index = this.topics.indexOf(topic);
+                    if (index !== -1) {
+                        this.topics.splice(index, 1);
+                        this.saveToLocalStorage(); // Save after deleting a topic
+                    }
+                },
+                addComment(topic) {
+                    if (topic.newComment.comment.trim() && topic.newComment.by.trim()) {
+                        const newComment = {
+                            comment: topic.newComment.comment,
+                            by: topic.newComment.by,
+                            date: new Date().toISOString(),
+                        };
+                        topic.comments.push(newComment);
+                        topic.newComment.comment = '';
+                        topic.newComment.by = '';
+
+                        this.saveToLocalStorage(); // Save after adding a new comment
+                    }
+                },
+                editComment(topic, comment) {
+                    this.currentComment = { ...comment, topicGuid: topic.guid };
+                },
+                saveComment() {
+                    if (this.currentComment) {
+                        const topic = this.topics.find(t => t.guid === this.currentComment.topicGuid);
+                        const comment = topic.comments.find(c => c.date === this.currentComment.date);
+                        if (comment) {
+                            comment.comment = this.currentComment.comment;
+                            comment.by = this.currentComment.by;
+                        }
+                        this.currentComment = null;
+                        this.saveToLocalStorage(); // Save after editing a comment
+                    }
+                },
+                deleteComment(topic, comment) {
+                    const index = topic.comments.indexOf(comment);
+                    if (index !== -1) {
+                        topic.comments.splice(index, 1);
+                        this.saveToLocalStorage(); // Save after deleting a comment
+                    }
+                },
+                saveToLocalStorage() {
+                    localStorage.setItem('topics', JSON.stringify(this.topics));
+                },
+                loadFromLocalStorage() {
+                    const savedTopics = localStorage.getItem('topics');
+                    if (savedTopics) {
+                        this.topics = JSON.parse(savedTopics);
+                    }
+                },
+                previousPage() {
+                    if (this.currentPage > 0) {
+                        this.currentPage--;
+                    }
+                },
+                nextPage() {
+                    if (this.currentPage < this.totalPages - 1) {
+                        this.currentPage++;
+                    }
+                },
+            },
+            computed: {
+                totalPages() {
+                    return Math.ceil(this.topics.length / this.pageSize);
+                },
+                paginatedTopics() {
+                    const startIndex = this.currentPage * this.pageSize;
+                    return this.topics.slice(startIndex, startIndex + this.pageSize);
+                },
+            },
+        });
+    </script>
+</body>
+
+</html>
